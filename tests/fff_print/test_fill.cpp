@@ -5,6 +5,7 @@
 
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/Fill/Fill.hpp"
+#include "libslic3r/Fill/FillSeededConcentric.hpp"
 #include "libslic3r/Flow.hpp"
 #include "libslic3r/Geometry.hpp"
 #include "libslic3r/Print.hpp"
@@ -193,6 +194,9 @@ TEST_CASE("Fill: Pattern Path Length", "[Fill]") {
 TEST_CASE("Fill: Seeded Concentric grows from a hole", "[Fill]") {
     std::unique_ptr<Slic3r::Fill> filler(Slic3r::Fill::new_from_type("seededconcentric"));
     filler->spacing = 5.;
+    auto *seeded_filler = dynamic_cast<FillSeededConcentric *>(filler.get());
+    REQUIRE(seeded_filler != nullptr);
+    seeded_filler->set_seed_point(Vec2d(50., 50.));
 
     FillParams fill_params;
     fill_params.density = 1.;
@@ -211,7 +215,7 @@ TEST_CASE("Fill: Seeded Concentric grows from a hole", "[Fill]") {
     const ExPolygon expolygon(outer, hole);
     Surface surface(stTop, expolygon);
     const Polylines paths = filler->fill_surface(&surface, fill_params);
-    REQUIRE(!paths.empty());
+    REQUIRE(paths.size() > 1);
     for (const Polyline& path : paths) {
         REQUIRE(path.is_valid());
         for (const Point& point : path.points)

@@ -76,8 +76,9 @@ void FillSeededConcentric::_fill_surface_single(
 
     Polygons current{ expolygon.holes[seed_hole_idx] };
     while (!current.empty()) {
-        // A hole is clockwise in an ExPolygon. A negative raw offset expands it
-        // into the printable material without offsetting the outer contour.
+        // A hole is clockwise in an ExPolygon. In the libslic3r offset helper,
+        // a negative offset grows that contour into the printable material
+        // without offsetting the outer contour.
         Polygons next = offset(current, -float(distance));
         if (next.empty())
             break;
