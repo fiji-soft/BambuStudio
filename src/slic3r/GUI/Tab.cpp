@@ -37,6 +37,7 @@
 #include "GUI_App.hpp"
 #include "GUI_ObjectList.hpp"
 #include "Plater.hpp"
+#include "GLCanvas3D.hpp"
 #include "MainFrame.hpp"
 #include "format.hpp"
 #include "SavePresetDialog.hpp"
@@ -3302,6 +3303,36 @@ void TabPrint::build()
         optgroup->append_single_option_line("bottom_color_penetration_layers");
         optgroup->append_single_option_line("infill_instead_top_bottom_surfaces");
         optgroup->append_single_option_line("internal_solid_infill_pattern");
+
+        Line seed_line = optgroup->create_single_option_line("seeded_concentric_seed");
+        seed_line.append_widget([this](wxWindow* parent) {
+            auto *button = new wxButton(parent, wxID_ANY, _L("Pick on model"));
+            button->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+                GLCanvas3D *canvas = wxGetApp().plater()->get_view3D_canvas3D();
+                if (canvas == nullptr)
+                    return;
+
+                const bool started = canvas->start_seed_point_picking([this](const Vec2d& seed_point) {
+                    DynamicPrintConfig new_config;
+                    new_config.set_key_value("seeded_concentric_seed", new ConfigOptionPoint(seed_point));
+                    m_config_manipulation.apply(m_config, &new_config);
+                    if (m_active_page)
+                        m_active_page->set_value("seeded_concentric_seed", seed_point);
+                    update();
+                });
+                if (!started) {
+                    MessageDialog dialog(wxGetApp().plater(),
+                        _L("Select one model instance first, then choose the seed point on the model."),
+                        _L("Seeded Concentric"), wxICON_INFORMATION | wxOK);
+                    dialog.ShowModal();
+                }
+            });
+
+            auto *sizer = new wxBoxSizer(wxHORIZONTAL);
+            sizer->Add(button, 0, wxALIGN_CENTER_VERTICAL);
+            return sizer;
+        });
+        optgroup->append_line(seed_line);
 
         optgroup = page->new_optgroup(L("Sparse infill"), L"param_infill");
         optgroup->append_single_option_line("sparse_infill_density");

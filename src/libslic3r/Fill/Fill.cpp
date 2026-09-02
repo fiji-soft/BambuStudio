@@ -15,6 +15,7 @@
 #include "FillConcentricInternal.hpp"
 #include "FillConcentric.hpp"
 #include "FillFloatingConcentric.hpp"
+#include "FillSeededConcentric.hpp"
 
 #define NARROW_INFILL_AREA_THRESHOLD 3
 
@@ -24,8 +25,10 @@ struct SurfaceFillParams
 {
 	// Zero based extruder ID.
     unsigned int 	extruder = 0;
-	// Infill pattern, adjusted for the density etc.
+    // Infill pattern, adjusted for the density etc.
     InfillPattern  	pattern = InfillPattern(0);
+    // Seed point in the centered, transformed object coordinate system.
+    Vec2d           seeded_concentric_seed = Vec2d::Zero();
 	//for locked zag
     InfillPattern   skin_pattern = InfillPattern(0);
     InfillPattern   skeleton_pattern = InfillPattern(0);
@@ -89,6 +92,8 @@ struct SurfaceFillParams
 
 		RETURN_COMPARE_NON_EQUAL(extruder);
 		RETURN_COMPARE_NON_EQUAL_TYPED(unsigned, pattern);
+		RETURN_COMPARE_NON_EQUAL(seeded_concentric_seed.x());
+		RETURN_COMPARE_NON_EQUAL(seeded_concentric_seed.y());
 		RETURN_COMPARE_NON_EQUAL(spacing);
 		RETURN_COMPARE_NON_EQUAL(overlap);
 		RETURN_COMPARE_NON_EQUAL(angle);
@@ -120,6 +125,7 @@ struct SurfaceFillParams
 	bool operator==(const SurfaceFillParams &rhs) const {
 		return  this->extruder 			== rhs.extruder 		&&
 				this->pattern 			== rhs.pattern 			&&
+				this->seeded_concentric_seed == rhs.seeded_concentric_seed &&
 				this->spacing 			== rhs.spacing 			&&
 				this->overlap 			== rhs.overlap 			&&
 				this->angle   			== rhs.angle   			&&
@@ -238,6 +244,8 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                         params.density = surface.is_top() ? region_config.top_surface_density.value : region_config.bottom_surface_density.value;
                     } else
 						params.pattern = region_config.top_surface_pattern == ipMonotonic ? ipMonotonic : ipRectilinear;
+					if (params.pattern == ipSeededConcentric)
+						params.seeded_concentric_seed = region_config.seeded_concentric_seed.value;
                     if (params.pattern == ipMonotonicLine) params.monotonic_travel_into_wall = region_config.monotonic_travel_into_wall.value;
 		        } else if (params.density <= 0)
 		            continue;
@@ -633,12 +641,16 @@ void Layer::make_fills(FillAdaptive::Octree* adaptive_fill_octree, FillAdaptive:
             assert(fill_concentric != nullptr);
             fill_concentric->print_config        = &this->object()->print()->config();
             fill_concentric->print_object_config = &this->object()->config();
-        } else if (surface_fill.params.pattern == ipConcentric) {
-            FillConcentric *fill_concentric = dynamic_cast<FillConcentric *>(f.get());
-            assert(fill_concentric != nullptr);
-            fill_concentric->print_config = &this->object()->print()->config();
-            fill_concentric->print_object_config = &this->object()->config();
-        } else if (surface_fill.params.pattern == ipLightning){
+		} else if (surface_fill.params.pattern == ipConcentric) {
+			FillConcentric *fill_concentric = dynamic_cast<FillConcentric *>(f.get());
+			assert(fill_concentric != nullptr);
+			fill_concentric->print_config = &this->object()->print()->config();
+			fill_concentric->print_object_config = &this->object()->config();
+		} else if (surface_fill.params.pattern == ipSeededConcentric) {
+			FillSeededConcentric *fill_seeded = dynamic_cast<FillSeededConcentric *>(f.get());
+			assert(fill_seeded != nullptr);
+			fill_seeded->set_seed_point(surface_fill.params.seeded_concentric_seed);
+		} else if (surface_fill.params.pattern == ipLightning){
             dynamic_cast<FillLightning::Filler*>(f.get())->generator = lightning_generator;
 		}
 		else if (surface_fill.params.pattern == ipMonotonicLine){
@@ -809,6 +821,7 @@ Polylines Layer::generate_sparse_infill_polylines_for_anchoring(FillAdaptive::Oc
         case ipCubic:
         case ipLine:
         case ipConcentric:
+		case ipSeededConcentric:
         case ipHoneycomb:
         case ip3DHoneycomb:
         case ipGyroid:

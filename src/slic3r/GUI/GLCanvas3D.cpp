@@ -21,6 +21,7 @@
 
 #include "slic3r/GUI/3DScene.hpp"
 #include "slic3r/GUI/BackgroundSlicingProcess.hpp"
+#include "slic3r/GUI/CameraUtils.hpp"
 #include "slic3r/GUI/GLShader.hpp"
 #include "slic3r/GUI/GUI.hpp"
 #include "slic3r/GUI/Tab.hpp"
@@ -1756,6 +1757,91 @@ void GLCanvas3D::on_change_color_mode(bool is_dark, bool reinit) {
 void GLCanvas3D::set_as_dirty()
 {
     m_dirty = true;
+}
+
+bool GLCanvas3D::start_seed_point_picking(SeedPointPickedCallback callback)
+{
+    if (!callback || m_canvas_type != ECanvasType::CanvasView3D || m_model == nullptr)
+        return false;
+
+    const Selection& selection = get_selection();
+    const GLVolume* volume = selection.get_first_volume();
+    if (volume == nullptr || volume->object_idx() < 0 || volume->instance_idx() < 0 ||
+        static_cast<size_t>(volume->object_idx()) >= m_model->objects.size())
+        return false;
+
+    const ModelObject* model_object = m_model->objects[volume->object_idx()];
+    if (model_object == nullptr || static_cast<size_t>(volume->instance_idx()) >= model_object->instances.size())
+        return false;
+
+    m_seed_point_picked_callback = std::move(callback);
+    m_seed_point_picking = true;
+    m_seed_point_marker_valid = false;
+    select_view("top");
+    if (m_canvas != nullptr)
+        m_canvas->SetFocus();
+    m_dirty = true;
+    request_extra_frame();
+    return true;
+}
+
+void GLCanvas3D::cancel_seed_point_picking()
+{
+    m_seed_point_picking = false;
+    m_seed_point_picked_callback = nullptr;
+    m_dirty = true;
+    request_extra_frame();
+}
+
+bool GLCanvas3D::_seed_point_from_screen(const Point& mouse_pos, Vec2d& seed_point, Vec3d& marker_world) const
+{
+    if (m_model == nullptr)
+        return false;
+
+    const GLVolume* volume = get_selection().get_first_volume();
+    if (volume == nullptr || volume->object_idx() < 0 || volume->instance_idx() < 0 ||
+        static_cast<size_t>(volume->object_idx()) >= m_model->objects.size())
+        return false;
+
+    const ModelObject* model_object = m_model->objects[volume->object_idx()];
+    if (model_object == nullptr || static_cast<size_t>(volume->instance_idx()) >= model_object->instances.size())
+        return false;
+
+    const Vec2d world_xy = CameraUtils::get_z0_position(get_active_camera(), mouse_pos.cast<double>());
+    if (!world_xy.allFinite())
+        return false;
+
+    const ModelInstance *model_instance = model_object->instances[volume->instance_idx()];
+    Vec2d seed_origin_world;
+    bool seed_origin_found = false;
+    if (const Print *print = fff_print()) {
+        for (const PrintObject *print_object : print->objects()) {
+            if (print_object->model_object() == nullptr || print_object->model_object()->id() != model_object->id())
+                continue;
+            for (const PrintInstance &print_instance : print_object->instances()) {
+                if (print_instance.model_instance != nullptr && print_instance.model_instance->id() == model_instance->id()) {
+                    seed_origin_world = Vec2d(
+                        unscaled<double>(print_instance.shift.x()),
+                        unscaled<double>(print_instance.shift.y()));
+                    seed_origin_found = true;
+                    break;
+                }
+            }
+            if (seed_origin_found)
+                break;
+        }
+    }
+
+    if (!seed_origin_found) {
+        const BoundingBoxf3 raw_bbox = model_object->raw_bounding_box();
+        if (!raw_bbox.defined)
+            return false;
+        seed_origin_world = (model_instance->get_matrix() * raw_bbox.center()).head<2>();
+    }
+
+    marker_world = Vec3d(world_xy.x(), world_xy.y(), 0.0);
+    seed_point = world_xy - seed_origin_world;
+    return seed_point.allFinite();
 }
 
 void GLCanvas3D::kick_render_fallback()
@@ -4818,6 +4904,11 @@ public:
 
 void GLCanvas3D::on_key(wxKeyEvent& evt)
 {
+    if (m_seed_point_picking && evt.GetEventType() == wxEVT_KEY_DOWN && evt.GetKeyCode() == WXK_ESCAPE) {
+        cancel_seed_point_picking();
+        return;
+    }
+
     static GLCanvas3D const * thiz = nullptr;
     static TranslationProcessor translationProcessor(nullptr, nullptr);
     if (thiz != this) {
@@ -5472,6 +5563,36 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
 #endif
 
     Point pos(evt.GetX(), evt.GetY());
+
+    if (m_seed_point_picking) {
+        if (evt.LeftDown()) {
+            Vec2d seed_point;
+            Vec3d marker_world;
+            if (_seed_point_from_screen(pos, seed_point, marker_world)) {
+                m_seed_point_marker_world = marker_world;
+                m_seed_point_marker_valid = true;
+                m_seed_point_picking = false;
+                auto callback = std::move(m_seed_point_picked_callback);
+                m_seed_point_picked_callback = nullptr;
+                if (callback)
+                    callback(seed_point);
+            }
+            m_dirty = true;
+            request_extra_frame();
+            return;
+        }
+        if (evt.RightDown()) {
+            cancel_seed_point_picking();
+            return;
+        }
+        if (evt.Leaving())
+            m_mouse.position = Vec2d(-1.0, -1.0);
+        else
+            m_mouse.position = pos.cast<double>();
+        m_dirty = true;
+        request_extra_frame();
+        return;
+    }
 
     ImGuiWrapper* imgui = wxGetApp().imgui();
     if (m_tooltip.is_in_imgui() && evt.LeftUp())
@@ -9281,6 +9402,11 @@ void GLCanvas3D::_render_overlays()
     }
     m_labels.render(sorted_instances);
     _render_3d_navigator();
+
+    if (m_seed_point_marker_valid && m_canvas_type == ECanvasType::CanvasView3D) {
+        const Point screen = CameraUtils::project(get_active_camera(), m_seed_point_marker_world);
+        ImGuiWrapper::draw_cross_hair(ImVec2(screen.x(), screen.y()), 10.0f, IM_COL32(255, 80, 40, 255), 16, 3.0f);
+    }
 }
 
 void GLCanvas3D::_render_style_editor()

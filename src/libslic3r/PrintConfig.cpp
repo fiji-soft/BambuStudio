@@ -2097,6 +2097,13 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Octagram Spiral"));
     def->set_default_value(new ConfigOptionEnum<InfillPattern>(ipRectilinear));
 
+    def = this->add("seeded_concentric_seed", coPoint);
+    def->label = L("Seed point");
+    def->category = L("Strength");
+    def->tooltip = L("XY point in the centered model coordinate system used as the origin for Seeded Concentric.");
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionPoint(Vec2d(0, 0)));
+
     def           = this->add("top_surface_density", coPercent);
     def->label    = L("Top surface density");
     def->category = L("Strength");

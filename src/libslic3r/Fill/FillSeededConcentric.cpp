@@ -10,15 +10,6 @@ namespace Slic3r {
 
 namespace {
 
-// Temporary prototype seed. These coordinates are in the model's unscaled XY space.
-constexpr coordf_t SeedPointXmm = 0.f;
-constexpr coordf_t SeedPointYmm = 0.f;
-
-Point seeded_concentric_seed_point()
-{
-    return Point::new_scale(SeedPointXmm, SeedPointYmm);
-}
-
 void append_clipped_loop(
     const Polygon& loop,
     const ExPolygon& expolygon,
@@ -65,7 +56,7 @@ void FillSeededConcentric::_fill_surface_single(
     if (distance <= 0)
         return;
 
-    const Point seed_point = seeded_concentric_seed_point();
+    const Point seed_point = this->m_seed_point;
     size_t seed_hole_idx = size_t(-1);
     double seed_distance2 = std::numeric_limits<double>::max();
     for (size_t i = 0; i < expolygon.holes.size(); ++i) {

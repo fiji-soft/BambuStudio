@@ -5,6 +5,7 @@
 #include <memory>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <stack>
 #include <vector>
 
@@ -675,6 +676,10 @@ private:
 
     // Screen is only refreshed from the OnIdle handler if it is dirty.
     bool m_dirty;
+    bool m_seed_point_picking{false};
+    std::function<void(const Vec2d&)> m_seed_point_picked_callback;
+    Vec3d m_seed_point_marker_world{Vec3d::Zero()};
+    bool m_seed_point_marker_valid{false};
     bool m_initialized;
     //BBS: add flag to controll rendering
     bool m_render_preview{ true };
@@ -863,6 +868,10 @@ public:
     void on_change_color_mode(bool is_dark, bool reinit = true);
     const bool get_dark_mode_status() { return m_is_dark; }
     void set_as_dirty();
+    using SeedPointPickedCallback = std::function<void(const Vec2d&)>;
+    bool start_seed_point_picking(SeedPointPickedCallback callback);
+    void cancel_seed_point_picking();
+    bool is_seed_point_picking() const { return m_seed_point_picking; }
     // macOS: arm the render-fallback timer so a freshly shown/reloaded scene
     // paints promptly even when wxEVT_IDLE is starved by a busy WKWebView tab.
     // No-op on other platforms. Safe to call from outside the canvas (e.g. when
@@ -1360,6 +1369,7 @@ public:
 
 private:
     bool _is_shown_on_screen() const;
+    bool _seed_point_from_screen(const Point& mouse_pos, Vec2d& seed_point, Vec3d& marker_world) const;
 
     void _update_slice_error_status();
 
