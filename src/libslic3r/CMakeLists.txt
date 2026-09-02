@@ -107,6 +107,8 @@ set(lisbslic3r_sources
     Fill/FillBase.hpp
     Fill/FillConcentric.cpp
     Fill/FillConcentric.hpp
+    Fill/FillSeededConcentric.cpp
+    Fill/FillSeededConcentric.hpp
     Fill/FillConcentricInternal.cpp
     Fill/FillConcentricInternal.hpp
     Fill/FillCrossHatch.cpp
