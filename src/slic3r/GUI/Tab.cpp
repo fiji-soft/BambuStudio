@@ -3304,8 +3304,11 @@ void TabPrint::build()
         optgroup->append_single_option_line("infill_instead_top_bottom_surfaces");
         optgroup->append_single_option_line("internal_solid_infill_pattern");
 
-        Line seed_line = optgroup->create_single_option_line("seeded_concentric_seed");
-        seed_line.append_widget([this](wxWindow* parent) {
+        optgroup->append_single_option_line("seeded_concentric_seed");
+
+        Line seed_picker_line { "", "" };
+        seed_picker_line.full_width = 1;
+        seed_picker_line.widget = [this](wxWindow* parent) {
             auto *button = new wxButton(parent, wxID_ANY, _L("Pick on model"));
             button->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
                 GLCanvas3D *canvas = wxGetApp().plater()->get_view3D_canvas3D();
@@ -3331,8 +3334,8 @@ void TabPrint::build()
             auto *sizer = new wxBoxSizer(wxHORIZONTAL);
             sizer->Add(button, 0, wxALIGN_CENTER_VERTICAL);
             return sizer;
-        });
-        optgroup->append_line(seed_line);
+        };
+        optgroup->append_line(seed_picker_line);
 
         optgroup = page->new_optgroup(L("Sparse infill"), L"param_infill");
         optgroup->append_single_option_line("sparse_infill_density");
