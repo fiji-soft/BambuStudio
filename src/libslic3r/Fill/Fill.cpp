@@ -484,6 +484,12 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
 		for (size_t i = 0; i < surface_fills_size; i++) {
 			if (surface_fills[i].surface.surface_type != stInternalSolid)
 				continue;
+			// Seeded Concentric deliberately uses one selected inner contour as
+			// its only offset source. Do not replace it with the generic narrow
+			// concentric filler, which would create a second front from the outer
+			// contour.
+			if (surface_fills[i].params.pattern == ipSeededConcentric)
+				continue;
 
 			size_t expolygons_size = surface_fills[i].expolygons.size();
 			std::vector<size_t> narrow_expoly_idx;
