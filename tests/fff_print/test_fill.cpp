@@ -190,6 +190,40 @@ TEST_CASE("Fill: Pattern Path Length", "[Fill]") {
     }
 }
 
+TEST_CASE("Fill: Seeded Concentric grows from a hole", "[Fill]") {
+    std::unique_ptr<Slic3r::Fill> filler(Slic3r::Fill::new_from_type("seededconcentric"));
+    filler->spacing = 5.;
+
+    FillParams fill_params;
+    fill_params.density = 1.;
+    fill_params.dont_adjust = true;
+
+    const Points outer {
+        Point::new_scale(0., 0.), Point::new_scale(100., 0.),
+        Point::new_scale(100., 100.), Point::new_scale(0., 100.)
+    };
+    Points hole {
+        Point::new_scale(30., 30.), Point::new_scale(70., 30.),
+        Point::new_scale(70., 70.), Point::new_scale(30., 70.)
+    };
+    std::reverse(hole.begin(), hole.end());
+
+    const ExPolygon expolygon(outer, hole);
+    Surface surface(stTop, expolygon);
+    const Polylines paths = filler->fill_surface(&surface, fill_params);
+    REQUIRE(!paths.empty());
+    for (const Polyline& path : paths) {
+        REQUIRE(path.is_valid());
+        for (const Point& point : path.points)
+            REQUIRE(expolygon.contains(point));
+    }
+
+    std::unique_ptr<Slic3r::Fill> no_hole_filler(Slic3r::Fill::new_from_type("seededconcentric"));
+    no_hole_filler->spacing = 5.;
+    Surface no_hole_surface(stTop, ExPolygon(outer));
+    REQUIRE(no_hole_filler->fill_surface(&no_hole_surface, fill_params).empty());
+}
+
 /*
 {
     my $collection = Slic3r::Polyline::Collection->new(
